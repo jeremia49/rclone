@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/rclone/rclone/fs"
@@ -101,42 +102,48 @@ func (o *Object) updateChunked(ctx context.Context, in0 io.Reader, src fs.Object
 
 func (o *Object) uploadChunks(ctx context.Context, in0 io.Reader, size int64, contentType string, extraHeaders map[string]string, partObj *Object, uploadDir string, options []fs.OpenOption) error {
 	chunkSize := int64(partObj.fs.opt.ChunkSize)
-
 	// TODO: upload chunks in parallel for faster transfer speeds
+	errChan := make(chan error)
+	for errprint := range errChan {
+		fmt.Println(errprint.Error())
+	}
+
 	for offset := int64(0); offset < size; offset += chunkSize {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
-		contentLength := chunkSize
+		go func(offset int64) {
+			fs.Debugf(ctx, "offset :"+strconv.Itoa(int(offset)))
+			contentLength := chunkSize
 
-		// Last chunk may be smaller
-		if size-offset < contentLength {
-			contentLength = size - offset
-		}
-
-		_ = offset + contentLength - 1
-
-		partObj.remote = fmt.Sprintf("%s/%d", uploadDir, offset)
-		// Enable low-level HTTP 2 retries.
-		// 2022-04-28 15:59:06 ERROR : stuff/video.avi: Failed to copy: uploading chunk failed: Put "https://censored.com/remote.php/dav/uploads/Admin/rclone-chunked-upload-censored/000006113198080-000006123683840": http2: Transport: cannot retry err [http2: Transport received Server's graceful shutdown GOAWAY] after Request.Body was written; define Request.GetBody to avoid this error
-
-		buf := make([]byte, chunkSize)
-		in := readers.NewRepeatableLimitReaderBuffer(in0, buf, chunkSize)
-
-		getBody := func() (io.ReadCloser, error) {
-			// RepeatableReader{} plays well with accounting so rewinding doesn't make the progress buggy
-			if _, err := in.Seek(0, io.SeekStart); err == nil {
-				return nil, err
+			// Last chunk may be smaller
+			if size-offset < contentLength {
+				contentLength = size - offset
 			}
 
-			return io.NopCloser(in), nil
-		}
+			_ = offset + contentLength - 1
 
-		err := partObj.updateSimple(ctx, in, getBody, partObj.remote, contentLength, contentType, nil, o.fs.chunksUploadURL, options...)
-		if err != nil {
-			return fmt.Errorf("uploading chunk failed: %w", err)
-		}
+			partObj.remote = fmt.Sprintf("%s/%d", uploadDir, offset)
+			// Enable low-level HTTP 2 retries.
+			// 2022-04-28 15:59:06 ERROR : stuff/video.avi: Failed to copy: uploading chunk failed: Put "https://censored.com/remote.php/dav/uploads/Admin/rclone-chunked-upload-censored/000006113198080-000006123683840": http2: Transport: cannot retry err [http2: Transport received Server's graceful shutdown GOAWAY] after Request.Body was written; define Request.GetBody to avoid this error
+
+			buf := make([]byte, chunkSize)
+			in := readers.NewRepeatableLimitReaderBuffer(in0, buf, chunkSize)
+
+			getBody := func() (io.ReadCloser, error) {
+				// RepeatableReader{} plays well with accounting so rewinding doesn't make the progress buggy
+				if _, err := in.Seek(0, io.SeekStart); err == nil {
+					return nil, err
+				}
+
+				return io.NopCloser(in), nil
+			}
+
+			err := partObj.updateSimple(ctx, in, getBody, partObj.remote, contentLength, contentType, nil, o.fs.chunksUploadURL, options...)
+			errChan <- err
+		}(offset)
+
 	}
 	return nil
 }
