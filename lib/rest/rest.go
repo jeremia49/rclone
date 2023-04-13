@@ -15,6 +15,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 
 	"github.com/rclone/rclone/fs"
@@ -259,6 +260,7 @@ func (api *Client) Call(ctx context.Context, opts *Opts) (resp *http.Response, e
 	}
 	if opts.ContentLength != nil {
 		req.ContentLength = *opts.ContentLength
+		headers["Content-Length"] = strconv.Itoa(int(*opts.ContentLength))
 	}
 	if opts.ContentRange != "" {
 		headers["Content-Range"] = opts.ContentRange
