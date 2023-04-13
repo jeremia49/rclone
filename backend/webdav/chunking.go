@@ -70,6 +70,10 @@ func (o *Object) shouldUseChunkedUpload(src fs.ObjectInfo) bool {
 func (o *Object) updateChunked(ctx context.Context, in0 io.Reader, src fs.ObjectInfo, options ...fs.OpenOption) (err error) {
 	var uploadDir string
 
+	contentType := fs.MimeType(ctx, src)
+	_ = o.filePath()
+	extraHeaders := o.extraHeaders(ctx, src)
+
 	// see https://docs.nextcloud.com/server/24/developer_manual/client_apis/WebDAV/chunking.html#starting-a-chunked-upload
 	uploadDir, err = o.createChunksUploadDirectory(ctx)
 	if err != nil {
@@ -79,9 +83,9 @@ func (o *Object) updateChunked(ctx context.Context, in0 io.Reader, src fs.Object
 	partObj := &Object{
 		fs: o.fs,
 	}
-
+	// err = o.updateSimple(ctx, in, nil, filePath, src.Size(), contentType, extraHeaders, o.fs.endpointURL, options...)
 	// see https://docs.nextcloud.com/server/24/developer_manual/client_apis/WebDAV/chunking.html#uploading-chunks
-	err = o.uploadChunks(ctx, in0, src.Size(), partObj, uploadDir, options)
+	err = o.uploadChunks(ctx, in0, src.Size(), contentType, extraHeaders, partObj, uploadDir, options)
 	if err != nil {
 		return err
 	}
@@ -95,7 +99,7 @@ func (o *Object) updateChunked(ctx context.Context, in0 io.Reader, src fs.Object
 	return nil
 }
 
-func (o *Object) uploadChunks(ctx context.Context, in0 io.Reader, size int64, partObj *Object, uploadDir string, options []fs.OpenOption) error {
+func (o *Object) uploadChunks(ctx context.Context, in0 io.Reader, size int64, contentType string, extraHeaders map[string]string, partObj *Object, uploadDir string, options []fs.OpenOption) error {
 	chunkSize := int64(partObj.fs.opt.ChunkSize)
 
 	// TODO: upload chunks in parallel for faster transfer speeds
@@ -129,7 +133,7 @@ func (o *Object) uploadChunks(ctx context.Context, in0 io.Reader, size int64, pa
 			return io.NopCloser(in), nil
 		}
 
-		err := partObj.updateSimple(ctx, in, getBody, partObj.remote, contentLength, "application/x-www-form-urlencoded", nil, o.fs.chunksUploadURL, options...)
+		err := partObj.updateSimple(ctx, in, getBody, partObj.remote, contentLength, contentType, nil, o.fs.chunksUploadURL, options...)
 		if err != nil {
 			return fmt.Errorf("uploading chunk failed: %w", err)
 		}
