@@ -16,6 +16,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/rclone/rclone/fs"
 	"github.com/rclone/rclone/lib/readers"
@@ -102,19 +103,16 @@ func (o *Object) updateChunked(ctx context.Context, in0 io.Reader, src fs.Object
 
 func (o *Object) uploadChunks(ctx context.Context, in0 io.Reader, size int64, contentType string, extraHeaders map[string]string, partObj *Object, uploadDir string, options []fs.OpenOption) error {
 	chunkSize := int64(partObj.fs.opt.ChunkSize)
-	// TODO: upload chunks in parallel for faster transfer speeds
-	errChan := make(chan error)
-	for errprint := range errChan {
-		fmt.Println(errprint.Error())
-	}
 
+	var wg sync.WaitGroup
+	// TODO: upload chunks in parallel for faster transfer speeds
 	for offset := int64(0); offset < size; offset += chunkSize {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-
+		fs.Debugf(ctx, "Offset : "+strconv.Itoa(int(offset)))
+		wg.Add(1)
 		go func(offset int64) {
-			fs.Debugf(ctx, "offset :"+strconv.Itoa(int(offset)))
 			contentLength := chunkSize
 
 			// Last chunk may be smaller
@@ -141,10 +139,17 @@ func (o *Object) uploadChunks(ctx context.Context, in0 io.Reader, size int64, co
 			}
 
 			err := partObj.updateSimple(ctx, in, getBody, partObj.remote, contentLength, contentType, nil, o.fs.chunksUploadURL, options...)
-			errChan <- err
+			if err != nil {
+				fs.Errorf(ctx, "uploading chunk failed: %w", err)
+			}
+
+			defer wg.Done()
+
 		}(offset)
 
 	}
+	wg.Wait()
+
 	return nil
 }
 
