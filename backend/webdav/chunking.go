@@ -115,9 +115,9 @@ func (o *Object) uploadChunks(ctx context.Context, in0 io.Reader, size int64, co
 			contentLength = size - offset
 		}
 
-		endOffset := offset + contentLength - 1
+		_ = offset + contentLength - 1
 
-		partObj.remote = fmt.Sprintf("%s/%015d-%015d", uploadDir, offset, endOffset)
+		partObj.remote = fmt.Sprintf("%s/%d", uploadDir, offset)
 		// Enable low-level HTTP 2 retries.
 		// 2022-04-28 15:59:06 ERROR : stuff/video.avi: Failed to copy: uploading chunk failed: Put "https://censored.com/remote.php/dav/uploads/Admin/rclone-chunked-upload-censored/000006113198080-000006123683840": http2: Transport: cannot retry err [http2: Transport received Server's graceful shutdown GOAWAY] after Request.Body was written; define Request.GetBody to avoid this error
 
