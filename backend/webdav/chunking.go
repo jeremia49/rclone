@@ -16,7 +16,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/rclone/rclone/fs"
 	"github.com/rclone/rclone/lib/readers"
@@ -104,15 +103,15 @@ func (o *Object) updateChunked(ctx context.Context, in0 io.Reader, src fs.Object
 func (o *Object) uploadChunks(ctx context.Context, in0 io.Reader, size int64, contentType string, extraHeaders map[string]string, partObj *Object, uploadDir string, options []fs.OpenOption) error {
 	chunkSize := int64(partObj.fs.opt.ChunkSize)
 
-	var wg sync.WaitGroup
+	// var wg sync.WaitGroup
 	// TODO: upload chunks in parallel for faster transfer speeds
 	for offset := int64(0); offset < size; offset += chunkSize {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		fs.Debugf(ctx, "Offset : "+strconv.Itoa(int(offset)))
-		wg.Add(1)
-		go func(offset int64) {
+		fs.Debugf(o, "Offset : "+strconv.Itoa(int(offset)))
+		// wg.Add(1)
+		func(offset int64) {
 			contentLength := chunkSize
 
 			// Last chunk may be smaller
@@ -143,12 +142,12 @@ func (o *Object) uploadChunks(ctx context.Context, in0 io.Reader, size int64, co
 				fs.Errorf(ctx, "uploading chunk failed: %w", err)
 			}
 
-			defer wg.Done()
+			// defer wg.Done()
 
 		}(offset)
 
 	}
-	wg.Wait()
+	// wg.Wait()
 
 	return nil
 }

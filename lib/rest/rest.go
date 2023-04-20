@@ -316,7 +316,9 @@ func (api *Client) Call(ctx context.Context, opts *Opts) (resp *http.Response, e
 		}
 	}
 	api.mu.RUnlock()
+	// fs.Debugf(ctx, "HTTP Call Started")
 	resp, err = c.Do(req)
+	// fs.Debugf(ctx, "HTTP Call Done")
 	api.mu.RLock()
 	if err != nil {
 		return nil, err

@@ -1343,13 +1343,13 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
 	}
 
 	if o.shouldUseChunkedUpload(src) {
-		fs.Debugf(src, "Update will use the chunked upload strategy")
+		fs.Debugf(o, "Update will use the chunked upload strategy")
 		err = o.updateChunked(ctx, in, src, options...)
 		if err != nil {
 			return err
 		}
 	} else {
-		fs.Debugf(src, "Update will use the normal upload strategy (no chunks)")
+		fs.Debugf(o, "Update will use the normal upload strategy (no chunks)")
 		contentType := fs.MimeType(ctx, src)
 		filePath := o.filePath()
 		extraHeaders := o.extraHeaders(ctx, src)
@@ -1409,7 +1409,9 @@ func (o *Object) updateSimple(ctx context.Context, body io.Reader, getBody func(
 		RootURL:       rootURL,
 	}
 	err = o.fs.pacer.CallNoRetry(func() (bool, error) {
+		// fs.Debugf(ctx, "HTTP PUT File Started")
 		resp, err = o.fs.srv.Call(ctx, &opts)
+		// fs.Debugf(ctx, "HTTP PUT File Ended")
 		return o.fs.shouldRetry(ctx, resp, err)
 	})
 	if err != nil {
