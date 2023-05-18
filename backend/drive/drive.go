@@ -1512,6 +1512,9 @@ func (f *Fs) newObjectWithExportInfo(
 // NewObject finds the Object at remote.  If it can't be found
 // it returns the error fs.ErrorObjectNotFound.
 func (f *Fs) NewObject(ctx context.Context, remote string) (fs.Object, error) {
+	if strings.HasSuffix(remote, "/") {
+		return nil, fs.ErrorIsDir
+	}
 	info, extension, exportName, exportMimeType, isDocument, err := f.getRemoteInfoWithExport(ctx, remote)
 	if err != nil {
 		return nil, err
@@ -3881,7 +3884,7 @@ func (o *Object) Update(ctx context.Context, in io.Reader, src fs.ObjectInfo, op
 	if err != nil {
 		return err
 	}
-	newO, err := o.fs.newObjectWithInfo(ctx, src.Remote(), info)
+	newO, err := o.fs.newObjectWithInfo(ctx, o.remote, info)
 	if err != nil {
 		return err
 	}

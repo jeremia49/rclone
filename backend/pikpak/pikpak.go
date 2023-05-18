@@ -190,11 +190,6 @@ Fill in for rclone to use a non root folder as its starting point.
 			Default:  fs.SizeSuffix(10 * 1024 * 1024),
 			Advanced: true,
 		}, {
-			Name:     "multi_thread_streams",
-			Help:     "Max number of streams to use for multi-thread downloads.\n\nThis will override global flag `--multi-thread-streams` and defaults to 1 to avoid rate limiting.",
-			Default:  1,
-			Advanced: true,
-		}, {
 			Name:     config.ConfigEncoding,
 			Help:     config.ConfigEncodingHelp,
 			Advanced: true,
@@ -224,7 +219,6 @@ type Options struct {
 	UseTrash            bool                 `config:"use_trash"`
 	TrashedOnly         bool                 `config:"trashed_only"`
 	HashMemoryThreshold fs.SizeSuffix        `config:"hash_memory_limit"`
-	MultiThreadStreams  int                  `config:"multi_thread_streams"`
 	Enc                 encoder.MultiEncoder `config:"encoding"`
 }
 
@@ -437,10 +431,6 @@ func newFs(ctx context.Context, name, path string, m configmap.Mapper) (*Fs, err
 
 	root := parsePath(path)
 
-	// overrides global `--multi-thread-streams` by local one
-	ci := fs.GetConfig(ctx)
-	ci.MultiThreadStreams = opt.MultiThreadStreams
-
 	f := &Fs{
 		name:    name,
 		root:    root,
@@ -451,6 +441,7 @@ func newFs(ctx context.Context, name, path string, m configmap.Mapper) (*Fs, err
 	f.features = (&fs.Features{
 		ReadMimeType:            true, // can read the mime type of objects
 		CanHaveEmptyDirectories: true, // can have empty directories
+		NoMultiThreading:        true, // can't have multiple threads downloading
 	}).Fill(ctx, f)
 
 	if err := f.newClientWithPacer(ctx); err != nil {
@@ -1420,6 +1411,16 @@ func (f *Fs) Command(ctx context.Context, name string, arg []string, opt map[str
 
 // ------------------------------------------------------------
 
+// parseFileID gets fid parameter from url query
+func parseFileID(s string) string {
+	if u, err := url.Parse(s); err == nil {
+		if q, err := url.ParseQuery(u.RawQuery); err == nil {
+			return q.Get("fid")
+		}
+	}
+	return ""
+}
+
 // setMetaData sets the metadata from info
 func (o *Object) setMetaData(info *api.File) (err error) {
 	if info.Kind == api.KindOfFolder {
@@ -1441,10 +1442,18 @@ func (o *Object) setMetaData(info *api.File) (err error) {
 	o.md5sum = info.Md5Checksum
 	if info.Links.ApplicationOctetStream != nil {
 		o.link = info.Links.ApplicationOctetStream
-	}
-	if len(info.Medias) > 0 && info.Medias[0].Link != nil {
-		fs.Debugf(o, "Using a media link")
-		o.link = info.Medias[0].Link
+		if fid := parseFileID(o.link.URL); fid != "" {
+			for mid, media := range info.Medias {
+				if media.Link == nil {
+					continue
+				}
+				if mfid := parseFileID(media.Link.URL); fid == mfid {
+					fs.Debugf(o, "Using a media link from Medias[%d]", mid)
+					o.link = media.Link
+					break
+				}
+			}
+		}
 	}
 	return nil
 }
