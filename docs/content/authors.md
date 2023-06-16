@@ -727,3 +727,5 @@ put them back in again.` >}}
   * Janne Hellsten <jjhellst@gmail.com>
   * cc <12904584+shvc@users.noreply.github.com>
   * Tareq Sharafy <tareq.sha@gmail.com>
+  * kapitainsky <dariuszb@me.com>
+  * douchen <playgoobug@gmail.com>
